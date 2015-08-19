@@ -154,6 +154,8 @@ local pattern = (function(...)
         t = {...}
         n = select('#', ...)
       end
+      
+      if n == 0 then return E("Set cannot be empty") end
 
       for i=1, n do
         local v = t[i]
