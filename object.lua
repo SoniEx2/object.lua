@@ -27,10 +27,10 @@ local E = function(...) error(..., 3) end
 local pattern = (function(...)
     local mt
 
-    local function new(p, t)
-      return smt({p = p, t = t}, mt)
+    local function new(p, t, a, e)
+      return smt({p = p, t = t, a = a, e = e}, mt)
     end
-    
+
     -- upper lower replace table
     -- e.g. ulrt['A'] = 'a', ulrt['a'] = 'A'
     local ulrt = {}
@@ -42,41 +42,50 @@ local pattern = (function(...)
 
     mt = {
       __concat = function(a, b)
-        return new(a.p .. b.p, min(a.t, b.t))
+        if b.a then
+          return E("Pattern cannot be prepended to")
+        end
+        if a.e then
+          return E("Pattern cannot be appended to")
+        end
+        return new(a.p .. b.p, min(a.t, b.t), a.a, b.e)
       end,
       __tostring = function(t)
         return t.p
       end,
       __mul = function(t, n)
-        return new(srep(t.p), 1)
+        return new(srep(t.p), 2, t.a, t.e)
       end,
       __add = function(t, q)
         if sfind("+-?*", q, 1, true) and t.t > 2 then
-          return new(t.p .. "+", 2)
+          return new(t.p .. "+", 2, t.a, t.e)
         else
-          return E("Not quantifiable")
+          return E("Not quantifiable or invalid quantifier")
         end
       end,
       __index = {
         find = function(t, s, n)
-          return sfind(s, t.p, n or 1)
+          return sfind(s, (t.a or "") .. t.p .. (t.e or ""), n or 1)
         end,
         gsub = function(t, s, r, n)
-          return sgsub(s, t.p, r, n or 1)
+          return sgsub(s, (t.a or "") .. t.p .. (t.e or ""), r, n or 1)
         end,
         gmatch = function(t, s)
-          return sgmatch(s, t.p)
+          return sgmatch(s, (t.a or "") .. t.p .. (t.e or ""))
         end,
         match = function(t, s, n)
-          return smatch(s, t.p, n or 1)
+          return smatch(s, (t.a or "") .. t.p .. (t.e or ""), n or 1)
         end,
       },
       __unm = function(t)
         if #t.p == 2 and ssub(t.p,1,1) == "%" and ulrt[ssub(t.p,2,2)] then
-          return new("%" .. ulrt[ssub(t.p,2,2)], t.t)
+          return new("%" .. ulrt[ssub(t.p,2,2)], t.t, t.a, t.e)
         else
           return t
         end
+      end,
+      __eq = function(a, b)
+        return a.p == b.p and a.t == b.t and a.a == b.a and a.e == b.e
       end
     }
 
@@ -89,19 +98,21 @@ local pattern = (function(...)
     end
 
     local function raw(s)
-      return new(s, 1)
+      local a, e
+      if ssub(s,1,1) == "^" then a = "^" end
+      if ssub(s,-1,-1) == "$" then e = "$" end
+      return new(s, 1, a, e)
     end
 
     local function group(p)
+      if p.t < 2 then
+        return E("Pattern may contain ungroupable characters")
+      end
       if #p.p == 0 then
         -- HACK: always captures an empty string
         return new("([\2-\1]?)", 2)
       end
       return new("(" .. p.p .. ")", 2)
-    end
-    
-    local function pos()
-      return new("()", 2)
     end
 
     local function escaperange_helper(c)
@@ -122,13 +133,14 @@ local pattern = (function(...)
         t1[n1] = escape(schar(i))
         n1 = n1 + 1
       end
-      if last then
+      if last1 then
         local t2 = {}
         local n2 = 1
         local last2
-        for i=sbyte(u), last, -1 do
+        for i=sbyte(u), last1, -1 do
           if escaperange_helper(schar(i)) then
             last2 = i
+            break
           end
           t2[n2] = escape(schar(i))
           n2 = n2 + 1
@@ -154,7 +166,7 @@ local pattern = (function(...)
         t = {...}
         n = select('#', ...)
       end
-      
+
       if n == 0 then return E("Set cannot be empty") end
 
       for i=1, n do
@@ -164,12 +176,13 @@ local pattern = (function(...)
           if l == 1 then
             t[i] = escape(v)
           elseif l == 2 or l == 3 then
-            local lbound, ubound = ssub(v,1,1), ssub(v,3,3)
+            local lbound, ubound = ssub(v,1,1), ssub(v,2,2)
             if l == 3 then
-              if ssub(v,2,2) ~= "-" then
+              if ubound ~= "-" then
                 return E("Not a range")
               end
-              v = ssub(v,1,1) .. ssub(v,3,3)
+              ubound = ssub(v,3,3)
+              v = lbound .. ubound
               l = #v
             end
             t[i] = escaperange(lbound, ubound)
@@ -185,9 +198,9 @@ local pattern = (function(...)
           return E("Not a character or range")
         end
       end
-      return new(negate and "[^" or "[" .. tconcat(t, "") .. "]", 3)
+      return new((negate and "[^" or "[") .. tconcat(t, "") .. "]", 3)
     end
-    
+
     local function frontier(s)
       if ssub(s.p,1,1) == "[" and ssub(s.p,-1,-1) == "]" then
         return new("%f" .. s.p, 2)
@@ -195,7 +208,7 @@ local pattern = (function(...)
         return E("Not a set")
       end
     end
-    
+
     local function bpairs(a,b)
       if #a == 1 and #b == 1 then
         return new("%b" .. a .. b, 2)
@@ -243,6 +256,9 @@ local pattern = (function(...)
       uppercase = new("%u", 3),
       alphanumeric = new("%w", 3),
       hexadecimal = new("%x", 3),
+      startwith = new("", 1, "^"),
+      endwith = new("", 1, nil, "$"),
+      pos = new("()", 2),
     }
 
     return {
@@ -253,7 +269,6 @@ local pattern = (function(...)
       character = character,
       frontier = frontier,
       bpairs = bpairs,
-      pos = pos,
       presets = presets
     }
   end)(...)
