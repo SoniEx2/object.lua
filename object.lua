@@ -54,7 +54,7 @@ local pattern = (function(...)
         return (t.a or "") .. t.p .. (t.e or "")
       end,
       __mul = function(t, n)
-        return new(srep(t.p), 2, t.a, t.e)
+        return new(srep(t.p, n), 2, t.a, t.e)
       end,
       __add = function(t, q)
         if sfind("+-?*", q, 1, true) and t.t > 2 then
