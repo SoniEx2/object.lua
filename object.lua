@@ -51,7 +51,7 @@ local pattern = (function(...)
         return new(a.p .. b.p, min(a.t, b.t), a.a, b.e)
       end,
       __tostring = function(t)
-        return t.p
+        return (t.a or "") .. t.p .. (t.e or "")
       end,
       __mul = function(t, n)
         return new(srep(t.p), 2, t.a, t.e)
