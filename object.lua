@@ -80,6 +80,12 @@ local pattern = (function(...)
       __unm = function(t)
         if #t.p == 2 and ssub(t.p,1,1) == "%" and ulrt[ssub(t.p,2,2)] then
           return new("%" .. ulrt[ssub(t.p,2,2)], t.t, t.a, t.e)
+        elseif t.t == 3 then
+          if ssub(t.p,1,2) == "[^" then
+            return new("["  .. ssub(t.p,3), t.t, t.a, t.e)
+          else
+            return new("[^" .. ssub(t.p,2), t.t, t.a, t.e)
+          end
         else
           return t
         end
@@ -155,6 +161,7 @@ local pattern = (function(...)
 
     local function set(...)
       local t, n
+      --[[ legacy code
       local negate
       if ... == false or ... == true then
         t = {select(2, ...)}
@@ -162,10 +169,10 @@ local pattern = (function(...)
         -- set(true, ...) should be "in set", set(false, ...) should be "not in set"
         -- it's more intuitive this way
         negate = not ...
-      else
-        t = {...}
-        n = select('#', ...)
-      end
+      else--]]
+      t = {...}
+      n = select('#', ...)
+      --end
 
       if n == 0 then return E("Set cannot be empty") end
 
@@ -198,11 +205,12 @@ local pattern = (function(...)
           return E("Not a character or range")
         end
       end
-      return new((negate and "[^" or "[") .. tconcat(t, "") .. "]", 3)
+      --return new((negate and "[^" or "[") .. tconcat(t, "") .. "]", 3)
+      return new("[" .. tconcat(t, "") .. "]", 3)
     end
 
     local function frontier(s)
-      if ssub(s.p,1,1) == "[" and ssub(s.p,-1,-1) == "]" then
+      if s.t == 3 and ssub(s.p,1,1) == "[" and ssub(s.p,-1,-1) == "]" then
         return new("%f" .. s.p, 2)
       else
         return E("Not a set")
@@ -219,7 +227,7 @@ local pattern = (function(...)
 
     local function character(c)
       if #c ~= 1 then return E("Not a character") end
-      return new(escape(c), 4)
+      return new(escape(c), 5)
     end
 
     local quantifiers = {
@@ -246,16 +254,16 @@ local pattern = (function(...)
 
     local presets = {
       any = new(".", 3),
-      letter = new("%a", 3),
-      control = new("%c", 3),
-      digit = new("%d", 3),
-      printable_no_space = new("%g", 3),
-      lowercase = new("%l", 3),
-      punctuation = new("%p", 3),
-      space = new("%s", 3),
-      uppercase = new("%u", 3),
-      alphanumeric = new("%w", 3),
-      hexadecimal = new("%x", 3),
+      letter = new("%a", 4),
+      control = new("%c", 4),
+      digit = new("%d", 4),
+      printable_no_space = new("%g", 4),
+      lowercase = new("%l", 4),
+      punctuation = new("%p", 4),
+      space = new("%s", 4),
+      uppercase = new("%u", 4),
+      alphanumeric = new("%w", 4),
+      hexadecimal = new("%x", 4),
       startwith = new("", 1, "^"),
       endwith = new("", 1, nil, "$"),
       pos = new("()", 2),
